@@ -3,6 +3,8 @@ import json
 import secrets
 import sqlite3
 import urllib.parse
+import psycopg
+from psycopg.rows import dict_row
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -17,6 +19,7 @@ load_dotenv()
 
 APP_TITLE = "Woojoo Naver Actions"
 DB_PATH = os.getenv("TOKEN_DB_PATH", "naver_tokens.sqlite3")
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID", "")
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET", "")
 GPT_ACTION_API_KEY = os.getenv("GPT_ACTION_API_KEY", "")
@@ -34,10 +37,51 @@ app = FastAPI(
 )
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET or "unsafe-dev-secret-change-before-deploy", https_only=os.getenv("COOKIE_SECURE", "true").lower() == "true", same_site="lax")
 
+class DatabaseConnection:
+    """Small compatibility wrapper for SQLite locally and PostgreSQL in hosted deployments."""
+    def __init__(self, connection, postgres=False):
+        self.connection = connection
+        self.postgres = postgres
+
+    def execute(self, sql, params=()):
+        if self.postgres:
+            if sql.lstrip().upper().startswith("INSERT OR REPLACE INTO NAVER_TOKENS"):
+                sql = """INSERT INTO naver_tokens
+                    (id, access_token, refresh_token, expires_at, token_type)
+                    VALUES (1, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO UPDATE SET
+                    access_token=EXCLUDED.access_token,
+                    refresh_token=EXCLUDED.refresh_token,
+                    expires_at=EXCLUDED.expires_at,
+                    token_type=EXCLUDED.token_type"""
+            else:
+                sql = sql.replace("?", "%s")
+        return self.connection.execute(sql, params)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            if exc_type is None:
+                self.connection.commit()
+            else:
+                self.connection.rollback()
+        finally:
+            self.connection.close()
+
 def db():
+    if DATABASE_URL:
+        conn = psycopg.connect(
+            DATABASE_URL,
+            row_factory=dict_row,
+            connect_timeout=10,
+            sslmode="require",
+        )
+        return DatabaseConnection(conn, postgres=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    return DatabaseConnection(conn)
 
 def init_db():
     with db() as conn:
