@@ -1,0 +1,159 @@
+openapi: 3.1.0
+info:
+  title: Woojoo Naver Actions
+  version: 0.1.0
+  description: >
+    Naver Search, DataLab keyword trends, and Naver Calendar actions for the
+    Woojoo Su-ni assistant. Search and DataLab use the legacy Naver Developers
+    API credentials configured on the middleware. Calendar uses a separate
+    Naver Login OAuth connection completed by the user.
+servers:
+  - url: https://YOUR-PUBLIC-HTTPS-HOST
+    description: Replace with the deployed middleware URL.
+security:
+  - ActionApiKey: []
+paths:
+  /actions/naver/search:
+    get:
+      operationId: searchNaver
+      summary: Search Naver news, blogs, web pages, cafes, or Knowledge iN
+      description: Use this to retrieve actual Naver search results for a topic. Choose category news, blog, webkr, cafearticle, or kin.
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 100 }
+          description: Search phrase, without a city name unless it is part of the topic.
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [news, blog, webkr, cafearticle, kin]
+            default: news
+        - name: display
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+        - name: start
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 1 }
+        - name: sort
+          in: query
+          required: false
+          schema: { type: string, enum: [sim, date], default: sim }
+      responses:
+        "200":
+          description: Naver search result payload
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "401": { description: Invalid middleware API key }
+        "502": { description: Naver API error }
+  /actions/naver/datalab/search:
+    post:
+      operationId: getNaverSearchTrend
+      summary: Analyze Naver integrated-search keyword trends
+      description: Query Naver DataLab search trend data for up to five keyword groups and a date range.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [startDate, endDate, keywordGroups]
+              properties:
+                startDate: { type: string, format: date, description: Start date YYYY-MM-DD }
+                endDate: { type: string, format: date, description: End date YYYY-MM-DD }
+                timeUnit: { type: string, enum: [date, week, month], default: date }
+                keywordGroups:
+                  type: array
+                  minItems: 1
+                  maxItems: 5
+                  items:
+                    type: object
+                    required: [groupName, keywords]
+                    properties:
+                      groupName: { type: string }
+                      keywords:
+                        type: array
+                        minItems: 1
+                        maxItems: 20
+                        items: { type: string }
+                device: { type: string, enum: [pc, mo] }
+                gender: { type: string, enum: [m, f] }
+                ages:
+                  type: array
+                  items:
+                    type: string
+                    enum: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]
+      responses:
+        "200":
+          description: DataLab time-series result
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "401": { description: Invalid middleware API key }
+        "502": { description: Naver API error }
+  /actions/naver/calendar/status:
+    get:
+      operationId: getNaverCalendarConnectionStatus
+      summary: Check whether the user's Naver Calendar is connected
+      responses:
+        "200":
+          description: Connection status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connected: { type: boolean }
+                  expires_at: { type: ["string", "null"] }
+  /oauth/naver/start:
+    get:
+      operationId: startNaverCalendarConnection
+      summary: Start Naver Login authorization for Calendar
+      description: Returns a Naver authorization URL. Show it to the user and ask them to open it, sign in, and approve. Do not claim the calendar is connected until status confirms it.
+      responses:
+        "200":
+          description: Authorization URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authorization_url: { type: string, format: uri }
+                  instructions: { type: string }
+  /actions/naver/calendar/create:
+    post:
+      operationId: createNaverCalendarEvent
+      summary: Create an event in the user's default Naver Calendar
+      description: Create a calendar event only after the user explicitly asks to add it and the Naver Calendar connection status is true. Interpret times in Asia/Seoul. Confirm title, date, start and end time if any are unclear.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, start, end]
+              properties:
+                title: { type: string, maxLength: 200 }
+                start: { type: string, description: Local Korea date-time, e.g. 2026-11-24T14:00:00 }
+                end: { type: string, description: Local Korea date-time, e.g. 2026-11-24T15:00:00 }
+                description: { type: string }
+                location: { type: string }
+      responses:
+        "200":
+          description: Event creation result
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "409": { description: Naver Calendar not connected or token expired }
+        "502": { description: Naver Calendar API error }
+components:
+  securitySchemes:
+    ActionApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

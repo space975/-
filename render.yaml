@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: woojoo-ai-manager
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    disk:
+      name: woojoo-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: APP_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: NAVER_CLIENT_ID
+        sync: false
+      - key: NAVER_CLIENT_SECRET
+        sync: false
+      - key: GPT_ACTION_API_KEY
+        generateValue: true
+      - key: BASE_URL
+        sync: false
+      - key: NAVER_REDIRECT_URI
+        sync: false
+      - key: TOKEN_DB_PATH
+        value: /var/data/naver_tokens.sqlite3
