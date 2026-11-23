@@ -2,14 +2,10 @@ services:
   - type: web
     name: woojoo-ai-manager
     runtime: python
-    plan: starter
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
-    disk:
-      name: woojoo-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: OPENAI_API_KEY
         sync: false
@@ -31,5 +27,5 @@ services:
         sync: false
       - key: NAVER_REDIRECT_URI
         sync: false
-      - key: TOKEN_DB_PATH
-        value: /var/data/naver_tokens.sqlite3
+      - key: DATABASE_URL
+        sync: false
